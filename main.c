@@ -7,16 +7,15 @@
 #include <fcntl.h>
 
 #include "fat32.h"
-
-#define BYTE_SIZE 8
-#define SECTOR_SIZE 512
-#define CLUSTER_SIZE 4096
+#include "bootsector.h"
+#include "directoryentry.h"
 
 #define ATTR_DIRECTORY 0x10
 #define ATTR_VOLUME_ID 0x08
 #define FREE_ENTRY 0xE5
 #define END_ENTRY 0x00
 #define END_OF_CLUSTER 0x0FFFFFF8
+#define MAX_INPUT_SIZE 50
 
 /*** private functions ***/
 void showInfo();
@@ -25,19 +24,13 @@ void changeDirectory(char dirName[]);
 void getFile(char fileName[]);
 int dirNameEquals(char dirName[], char cdName[]);
 int fileNameEquals(char fileName[], char getName[]);
-void readCluster(int clusterNum);
-void readSector(int sectorNum);
-uint32_t readFAT(int n);
-void readFile(int startCluster, int fileFD);
+void populateFile(int startCluster, int fileFD);
+void getInputFromUser(char dest[]);
+void processInput(char input[]);
 
 
 /*** private global variables ***/
-fat32BS *bootSector;
-fat32DE *directoryEntry;
-char buf[SECTOR_SIZE];
-char bufCluster[CLUSTER_SIZE];
-int deviceFP;
-int cluster2;
+fat32 *fat32Obj;
 
 int main(int argc, char* argv[])
 {
@@ -46,43 +39,83 @@ int main(int argc, char* argv[])
 	{
 		printf("Ussage: fat32reader /dev/somedevice\nExiting program\n");
 		exit(EXIT_FAILURE);	
+	}	
+	int deviceFP = open(argv[1], O_RDONLY); // TODO: dont forget to close
+	fat32Obj = createFat32(deviceFP);
+	
+	char input[MAX_INPUT_SIZE];
+	while (1)
+	{
+		getInputFromUser(input);
+		processInput(input);
 	}
 	
-	deviceFP = open(argv[1], O_RDONLY);
-	read(deviceFP, buf, SECTOR_SIZE);
-	bootSector = (fat32BS*) malloc(sizeof(fat32BS));
-	memcpy(bootSector, buf, sizeof(*bootSector));
+	showInfo();
 	
-	showInfo(bootSector);
-	
-	cluster2 = bootSector->BPB_RsvdSecCnt + (bootSector->BPB_NumFATs * bootSector->BPB_FATSz32);
-	readCluster(2);
-	directoryEntry = (fat32DE*) bufCluster;
-	
-	printf("Dir name: %s\n", directoryEntry->DIR_Name);
-	
-	showDir(directoryEntry);
+	showDir();
 	
 	changeDirectory("LOLCATS");
 	
-	showDir(directoryEntry);
+	showDir();
 	
 	changeDirectory("..");
 	
-	showDir(directoryEntry);
+	showDir();
 	
-	printf("\n\nplease work!!!  %d\n\n", readFAT(6));
+	printf("\n\nplease work!!!  %d\n\n", readFAT(fat32Obj, 6));
 	
 	getFile("1.JPG");
 	
 	return 0;
 }
 
+/*---------------------------------------------------------------------------------getInputFromUser
+ * 
+ */
+void getInputFromUser(char dest[])
+{
+	memset(dest, 0, MAX_INPUT_SIZE);
+	write(STDOUT_FILENO, "> ", 2);
+	read(STDIN_FILENO, dest, MAX_INPUT_SIZE);
+	if (strlen(dest) > 0)
+		dest[strlen(dest) - 1] = '\0';
+}// getInputFromUser
+
+/*-------------------------------------------------------------------------------------processInput
+ * 
+ */
+void processInput(char input[])
+{
+	char delim[2] = " ";
+	char *token;
+	
+	token = strtok(input, delim);
+	if (token == NULL || strlen(token) <= 0)
+		return;
+	
+	if (strcmp(token, "info") == 0)
+		showInfo();
+	else if (strcmp(token, "dir") == 0)
+		showDir();
+	else if (strcmp(token, "cd") == 0)
+	{
+		token = strtok(NULL, delim);
+		changeDirectory(token);
+	}
+	else if (strcmp(token, "get") == 0)
+	{
+		token = strtok(NULL, delim);
+		getFile(token);
+	}
+}// processInput
+
 /*-----------------------------------------------------------------------------------------showInfo
  * Show the info of a boot sector
  */
 void showInfo()
 {
+	fat32BS *bootSector = fat32Obj->bootSector;
+	
 	printf("\n---- Device Info ----\n");
 	printf("OEM Name: %.*s\n", BS_OEMName_LENGTH, bootSector->BS_OEMName);
 	printf("Label: %.*s\n", BS_VolLab_LENGTH, bootSector->BS_VolLab);
@@ -110,7 +143,7 @@ void showInfo()
  */
 void showDir()
 {
-	fat32DE *currDir = directoryEntry;
+	fat32DE *currDir = fat32Obj->directoryEntry;
 	printf("\nDIRECTORY LISTING\n");
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
@@ -134,7 +167,7 @@ void showDir()
  */
 void changeDirectory(char dirName[])
 {
-	fat32DE *currDir = directoryEntry;
+	fat32DE *currDir = fat32Obj->directoryEntry;
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
 	{
@@ -142,8 +175,8 @@ void changeDirectory(char dirName[])
 		{
 			if (dirNameEquals(currDir->DIR_Name, dirName))
 			{
-				readCluster(currDir->DIR_FstClusLO);
-				directoryEntry = (fat32DE*) bufCluster;
+				readCluster(fat32Obj, currDir->DIR_FstClusLO, fat32Obj->dirClusterBuf);
+				fat32Obj->directoryEntry = (fat32DE*) fat32Obj->dirClusterBuf;
 			}
 		}
 		currDir++;
@@ -155,7 +188,7 @@ void changeDirectory(char dirName[])
  */
 void getFile(char fileName[])
 {
-	fat32DE *currDir = directoryEntry;
+	fat32DE *currDir = fat32Obj->directoryEntry;
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
 	{
@@ -164,7 +197,7 @@ void getFile(char fileName[])
 			if (fileNameEquals(currDir->DIR_Name, fileName))
 			{
 				int fileFD = open(fileName, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-				readFile(currDir->DIR_FstClusLO, fileFD);
+				populateFile(currDir->DIR_FstClusLO, fileFD);
 				close(fileFD);
 			}
 		}
@@ -185,6 +218,9 @@ int dirNameEquals(char dirName[], char cdName[])
 		if (dirName[i] != cdName[i])
 			return 0;
 	}
+	
+	if (strlen(cdName) < 8 && dirName[strlen(cdName)] != (char)0x20)
+		return 0;
 	
 	return 1;
 }// dirNameEquals
@@ -215,59 +251,20 @@ int fileNameEquals(char fileName[], char getName[])
 	return 1;
 }// fileNameEquals
 
-/*--------------------------------------------------------------------------------------readCluster
+/*-----------------------------------------------------------------------------------------populateFile
  * 
  */
-void readCluster(int clusterNum)
-{
-	if (clusterNum == 0)
-		clusterNum = 2;
-	
-	lseek(deviceFP, cluster2 * SECTOR_SIZE + ((clusterNum - 2) * 8 * SECTOR_SIZE), SEEK_SET);
-	read(deviceFP, bufCluster, CLUSTER_SIZE);
-}// readCluster
-
-/*---------------------------------------------------------------------------------------readSector
- * 
- */
-void readSector(int sectorNum)
-{
-	lseek(deviceFP, sectorNum * SECTOR_SIZE, SEEK_SET);
-	read(deviceFP, buf, SECTOR_SIZE);
-}// readSector
-
-/*------------------------------------------------------------------------------------------readFAT
- * NOTE!!!! see calculations? remember tip from class? this is the main bug
- */
-uint32_t readFAT(int n)
-{
-	uint32_t fatEntry = -1;
-	
-	int fatOffset = n * 4;
-	int thisFATSecNum = bootSector->BPB_RsvdSecCnt + (fatOffset / bootSector->BPB_BytesPerSec);
-	readSector(thisFATSecNum);	
-	int thisFATEntOffset = fatOffset % bootSector->BPB_BytesPerSec;
-	fatEntry = (uint32_t) buf[thisFATEntOffset];
-	fatEntry = fatEntry & 0x0FFFFFFF; // ignoring first 4 bits
-	
-	return fatEntry;
-}// readFAT
-
-/*-----------------------------------------------------------------------------------------readFile
- * 
- */
-void readFile(int startCluster, int fileFD)
+void populateFile(int startCluster, int fileFD)
 {
 	int currCluster = startCluster;
 	
 	while (currCluster < (uint32_t)END_OF_CLUSTER && currCluster != 0)
 	{
-		readCluster(currCluster);
-		//printf("%.*s", CLUSTER_SIZE, bufCluster);
-		write(fileFD, bufCluster, CLUSTER_SIZE);
-		currCluster = readFAT(currCluster);
+		readCluster(fat32Obj, currCluster, fat32Obj->fileClusterBuf);
+		write(fileFD, fat32Obj->fileClusterBuf, CLUSTER_SIZE);
+		currCluster = readFAT(fat32Obj, currCluster);
 	}
-}// readFile
+}// populateFile
 
 
 
