@@ -3,8 +3,6 @@
 
 #include <inttypes.h>
 
-#define SECTOR_SIZE 512
-
 /* boot sector constants */
 #define BS_OEMName_LENGTH 8
 #define BS_VolLab_LENGTH 11
@@ -51,5 +49,13 @@ typedef struct fat32BS_struct fat32BS;
 
 /*** public functions ***/
 fat32BS* initializeBootSector(int deviceFP);
+
+int getMirrFatVal(fat32BS *bootSector);
+
+char* getMediaType(fat32BS *bootSector);
+
+char* getDriveType(fat32BS *bootSector);
+
+char* getMirrFatMsg(fat32BS *bootSector);
 
 #endif

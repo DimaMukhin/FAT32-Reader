@@ -8,12 +8,13 @@
 
 #define BYTE_SIZE 8
 
-#define CLUSTER_SIZE 4096
-
 typedef struct fat32_struct
 {
 	int deviceFP;
 	int cluster2;
+	uint32_t sectorSize;
+	uint32_t clusterSize;
+	uint32_t curDirCluster;
 	char *dirClusterBuf;
 	char *fatSectorBuf;
 	char *fileClusterBuf;

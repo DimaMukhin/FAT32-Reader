@@ -9,6 +9,7 @@
 #include "fat32.h"
 #include "bootsector.h"
 #include "directoryentry.h"
+#include "bootsector.h"
 
 #define ATTR_DIRECTORY 0x10
 #define ATTR_VOLUME_ID 0x08
@@ -24,7 +25,7 @@ void changeDirectory(char dirName[]);
 void getFile(char fileName[]);
 int dirNameEquals(char dirName[], char cdName[]);
 int fileNameEquals(char fileName[], char getName[]);
-void populateFile(int startCluster, int fileFD);
+void populateFile(int startCluster, int fileFD, uint32_t fileSize);
 void getInputFromUser(char dest[]);
 void processInput(char input[]);
 
@@ -49,22 +50,6 @@ int main(int argc, char* argv[])
 		getInputFromUser(input);
 		processInput(input);
 	}
-	
-	showInfo();
-	
-	showDir();
-	
-	changeDirectory("LOLCATS");
-	
-	showDir();
-	
-	changeDirectory("..");
-	
-	showDir();
-	
-	printf("\n\nplease work!!!  %d\n\n", readFAT(fat32Obj, 6));
-	
-	getFile("1.JPG");
 	
 	return 0;
 }
@@ -120,9 +105,9 @@ void showInfo()
 	printf("OEM Name: %.*s\n", BS_OEMName_LENGTH, bootSector->BS_OEMName);
 	printf("Label: %.*s\n", BS_VolLab_LENGTH, bootSector->BS_VolLab);
 	printf("File System Type: %.*s\n", BS_FilSysType_LENGTH, bootSector->BS_FilSysType);
-	printf("Media Type: %#X (TODO: implement fixed/removable)\n", bootSector->BPB_Media);
+	printf("Media Type: %#X (%s)\n", bootSector->BPB_Media, getMediaType(bootSector));
 	printf("Size: %d (Sectors, TODO: change)\n", bootSector->BPB_TotSec32);
-	printf("Drive Number: %#X (TODO: implement floppy/hard disk logic)\n", bootSector->BS_DrvNum);
+	printf("Drive Number: %#X (%s)\n", bootSector->BS_DrvNum, getDriveType(bootSector));
 	
 	printf("\n--- Geometry ---\n");
 	printf("Bytes per Sector: %d\n", bootSector->BPB_BytesPerSec);
@@ -135,7 +120,7 @@ void showInfo()
 	printf("Reserved Sectors: %d\n", bootSector->BPB_RsvdSecCnt);
 	printf("Number of FATs: %d\n", bootSector->BPB_NumFATs);
 	printf("FAT Size: %d sectors\n", bootSector->BPB_FATSz32);
-	printf("Mirrored FAT: %d (finish implementing logic)\n", bootSector->BPB_ExtFlags & 0x0080);
+	printf("Mirrored FAT: %d (%s)\n", getMirrFatVal(bootSector), getMirrFatMsg(bootSector));
 }// showInfo
 
 /*------------------------------------------------------------------------------------------showDir
@@ -144,6 +129,11 @@ void showInfo()
 void showDir()
 {
 	fat32DE *currDir = fat32Obj->directoryEntry;
+	char clusterBuffer[fat32Obj->clusterSize];
+	uint32_t curEntry = 0;
+	uint32_t curClust = fat32Obj->curDirCluster;
+	uint32_t dirsPerClust = fat32Obj->clusterSize / sizeof(currDir);
+	
 	printf("\nDIRECTORY LISTING\n");
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
@@ -157,9 +147,26 @@ void showDir()
 			else
 				printf("%s\t%d\n", currDir->DIR_Name, currDir->DIR_FileSize);
 		}
-		currDir++;
+		curEntry++;
+		if (curEntry > dirsPerClust)
+		{
+			curClust = readFAT(fat32Obj, curClust);
+			if (curClust < (uint32_t)END_OF_CLUSTER && curClust != 0)
+			{
+				curEntry = 0;
+				readCluster(fat32Obj, curClust, clusterBuffer);
+				currDir = (fat32DE*) clusterBuffer;
+			}
+			else
+			{
+				return;
+			}
+		}
+		else
+		{
+			currDir++;
+		}
 	}
-	
 }// showDir
 
 /*----------------------------------------------------------------------------------changeDirectory
@@ -176,6 +183,7 @@ void changeDirectory(char dirName[])
 			if (dirNameEquals(currDir->DIR_Name, dirName))
 			{
 				readCluster(fat32Obj, currDir->DIR_FstClusLO, fat32Obj->dirClusterBuf);
+				fat32Obj->curDirCluster = currDir->DIR_FstClusLO;
 				fat32Obj->directoryEntry = (fat32DE*) fat32Obj->dirClusterBuf;
 			}
 		}
@@ -197,7 +205,7 @@ void getFile(char fileName[])
 			if (fileNameEquals(currDir->DIR_Name, fileName))
 			{
 				int fileFD = open(fileName, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-				populateFile(currDir->DIR_FstClusLO, fileFD);
+				populateFile(currDir->DIR_FstClusLO, fileFD, currDir->DIR_FileSize);
 				close(fileFD);
 			}
 		}
@@ -254,15 +262,23 @@ int fileNameEquals(char fileName[], char getName[])
 /*-----------------------------------------------------------------------------------------populateFile
  * 
  */
-void populateFile(int startCluster, int fileFD)
+void populateFile(int startCluster, int fileFD, uint32_t fileSize)
 {
 	int currCluster = startCluster;
+	int nextCluster;
+	uint32_t lastClusterSize = fileSize % fat32Obj->clusterSize;
 	
 	while (currCluster < (uint32_t)END_OF_CLUSTER && currCluster != 0)
 	{
 		readCluster(fat32Obj, currCluster, fat32Obj->fileClusterBuf);
-		write(fileFD, fat32Obj->fileClusterBuf, CLUSTER_SIZE);
-		currCluster = readFAT(fat32Obj, currCluster);
+		
+		nextCluster = readFAT(fat32Obj, currCluster);
+		if (nextCluster >= (uint32_t)END_OF_CLUSTER)
+			write(fileFD, fat32Obj->fileClusterBuf, lastClusterSize);
+		else
+			write(fileFD, fat32Obj->fileClusterBuf, fat32Obj->clusterSize);
+		
+		currCluster = nextCluster;
 	}
 }// populateFile
 

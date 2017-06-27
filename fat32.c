@@ -16,14 +16,18 @@ fat32* createFat32(int deviceFP)
 	fat32Obj->bootSector = initializeBootSector(deviceFP);
 	
 	fat32BS *bootSector = fat32Obj->bootSector;
+	
+	fat32Obj->sectorSize = bootSector->BPB_BytesPerSec;
+	fat32Obj->clusterSize = bootSector->BPB_SecPerClus * fat32Obj->sectorSize;
+	fat32Obj->curDirCluster = bootSector->BPB_RootClus;
 	fat32Obj->cluster2 = bootSector->BPB_RsvdSecCnt + 
 		(bootSector->BPB_NumFATs * bootSector->BPB_FATSz32);
 	
-	fat32Obj->dirClusterBuf = (char*) malloc(CLUSTER_SIZE);
-	fat32Obj->fatSectorBuf = (char*) malloc(SECTOR_SIZE);
-	fat32Obj->fileClusterBuf = (char*) malloc(CLUSTER_SIZE);
+	fat32Obj->dirClusterBuf = (char*) malloc(fat32Obj->clusterSize);
+	fat32Obj->fatSectorBuf = (char*) malloc(fat32Obj->sectorSize);
+	fat32Obj->fileClusterBuf = (char*) malloc(fat32Obj->clusterSize);
 	
-	readCluster(fat32Obj, 2, fat32Obj->dirClusterBuf);
+	readCluster(fat32Obj, fat32Obj->curDirCluster, fat32Obj->dirClusterBuf);
 	fat32Obj->directoryEntry = (fat32DE*) fat32Obj->dirClusterBuf;
 	
 	return fat32Obj;
@@ -38,8 +42,9 @@ void readCluster(fat32 *fat32Obj, int clusterNum, char buf[])
 		clusterNum = 2;
 	
 	int cluster2 = fat32Obj->cluster2;
-	lseek(fat32Obj->deviceFP, cluster2 * SECTOR_SIZE + ((clusterNum - 2) * 8 * SECTOR_SIZE), SEEK_SET);
-	read(fat32Obj->deviceFP, buf, CLUSTER_SIZE);
+	lseek(fat32Obj->deviceFP, cluster2 * fat32Obj->sectorSize + 
+		((clusterNum - 2) * 8 * fat32Obj->sectorSize), SEEK_SET);
+	read(fat32Obj->deviceFP, buf, fat32Obj->clusterSize);
 }// readCluster
 
 /*---------------------------------------------------------------------------------------readSector
@@ -47,8 +52,8 @@ void readCluster(fat32 *fat32Obj, int clusterNum, char buf[])
  */
 void readSector(fat32 *fat32Obj, int sectorNum, char buf[])
 {
-	lseek(fat32Obj->deviceFP, sectorNum * SECTOR_SIZE, SEEK_SET);
-	read(fat32Obj->deviceFP, buf, SECTOR_SIZE);
+	lseek(fat32Obj->deviceFP, sectorNum * fat32Obj->sectorSize, SEEK_SET);
+	read(fat32Obj->deviceFP, buf, fat32Obj->sectorSize);
 }// readSector
 
 /*------------------------------------------------------------------------------------------readFAT
