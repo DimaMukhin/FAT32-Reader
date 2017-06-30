@@ -5,6 +5,7 @@
 
 #include "bootsector.h"
 #include "directoryentry.h"
+#include "fsinfo.h"
 
 #define BYTE_SIZE 8
 
@@ -20,6 +21,7 @@ typedef struct fat32_struct
 	char *fileClusterBuf;
 	fat32BS *bootSector;
 	fat32DE *directoryEntry;
+	fat32FI *fsinfo;
 } fat32;
 
 /*** public functions ***/
@@ -30,5 +32,7 @@ void readCluster(fat32 *fat32Obj, int clusterNum, char buf[]);
 uint32_t readFAT(fat32 *fat32Obj, int n);
 
 void readSector(fat32 *fat32Obj, int sectorNum, char buf[]);
+
+void checkFat32(fat32 *fat32Obj);
 
 #endif

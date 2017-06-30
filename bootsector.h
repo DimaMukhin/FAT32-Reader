@@ -52,6 +52,8 @@ fat32BS* initializeBootSector(int deviceFP);
 
 int getMirrFatVal(fat32BS *bootSector);
 
+int isBootSectorValid(fat32BS *bootSector);
+
 char* getMediaType(fat32BS *bootSector);
 
 char* getDriveType(fat32BS *bootSector);

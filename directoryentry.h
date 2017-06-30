@@ -26,4 +26,7 @@ struct fat32DE_struct {
 
 typedef struct fat32DE_struct fat32DE;
 
+/*** public functions ***/
+int getDirNameSize(fat32DE *dir);
+
 #endif

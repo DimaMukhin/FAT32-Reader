@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 #include "fat32.h"
 #include "bootsector.h"
@@ -13,6 +14,7 @@
 
 #define ATTR_DIRECTORY 0x10
 #define ATTR_VOLUME_ID 0x08
+#define ATTR_LONG_NAME 0x0F
 #define FREE_ENTRY 0xE5
 #define END_ENTRY 0x00
 #define END_OF_CLUSTER 0x0FFFFFF8
@@ -44,6 +46,8 @@ int main(int argc, char* argv[])
 	int deviceFP = open(argv[1], O_RDONLY); // TODO: dont forget to close
 	fat32Obj = createFat32(deviceFP);
 	
+	checkFat32(fat32Obj);
+
 	char input[MAX_INPUT_SIZE];
 	while (1)
 	{
@@ -135,16 +139,17 @@ void showDir()
 	uint32_t dirsPerClust = fat32Obj->clusterSize / sizeof(currDir);
 	
 	printf("\nDIRECTORY LISTING\n");
+	printf("VOL_ID: %.*s\n\n", BS_VolLab_LENGTH, fat32Obj->bootSector->BS_VolLab);
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
 	{
 		if (currDir->DIR_Name[0] != (char)FREE_ENTRY && currDir->DIR_FileSize != -1)
 		{
-			if (currDir->DIR_Attr == (char)ATTR_VOLUME_ID)
-				printf("VOL_ID: %s\n\n", currDir->DIR_Name);
-			else if (currDir->DIR_Attr == (char)ATTR_DIRECTORY)
-				printf("<%s>\t%d\n", currDir->DIR_Name, currDir->DIR_FileSize);
-			else
+			if (currDir->DIR_Attr == (char)ATTR_DIRECTORY)
+				printf("<%.*s>\t%d\n", getDirNameSize(currDir), 
+				currDir->DIR_Name, currDir->DIR_FileSize);
+			else if (currDir->DIR_Attr != (char)ATTR_LONG_NAME &&
+				currDir->DIR_Attr != (char)ATTR_VOLUME_ID)
 				printf("%s\t%d\n", currDir->DIR_Name, currDir->DIR_FileSize);
 		}
 		curEntry++;
@@ -167,6 +172,9 @@ void showDir()
 			currDir++;
 		}
 	}
+	
+	printf("--Bytes Free: %d\n", fat32Obj->fsinfo->FSI_Free_Count);
+	printf("--DONE\n");
 }// showDir
 
 /*----------------------------------------------------------------------------------changeDirectory

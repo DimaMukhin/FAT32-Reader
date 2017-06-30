@@ -6,6 +6,11 @@
 #include "fat32.h"
 #include "bootsector.h"
 
+/*** private function declerations ***/
+void validateFatIs32(fat32 *fat32Obj);
+
+/*** public functions region ***/
+
 /*--------------------------------------------------------------------------------------createFat32
  * 
  */
@@ -29,6 +34,11 @@ fat32* createFat32(int deviceFP)
 	
 	readCluster(fat32Obj, fat32Obj->curDirCluster, fat32Obj->dirClusterBuf);
 	fat32Obj->directoryEntry = (fat32DE*) fat32Obj->dirClusterBuf;
+	
+	char tempSectorBuf[fat32Obj->sectorSize];
+	readSector(fat32Obj, bootSector->BPB_FSInfo, tempSectorBuf);
+	fat32Obj->fsinfo = (fat32FI*) malloc(sizeof(fat32FI));
+	memcpy(fat32Obj->fsinfo, tempSectorBuf, fat32Obj->sectorSize);
 	
 	return fat32Obj;
 }// createFat32
@@ -74,3 +84,63 @@ uint32_t readFAT(fat32 *fat32Obj, int n)
 	return fatEntry;
 }// readFAT
 
+/*---------------------------------------------------------------------------------------checkFat32
+ * 
+ */
+void checkFat32(fat32 *fat32Obj)
+{
+	if (!isBootSectorValid(fat32Obj->bootSector))
+	{
+		printf("BootSector was not loaded correctly\nExiting program\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	validateFatIs32(fat32Obj);
+	
+	if (!isFSinfoValid(fat32Obj->fsinfo))
+	{
+		printf("file system info was not loaded correctly\nExiting program\n");
+		exit(EXIT_FAILURE);
+	}
+}// checkFat32
+
+/*** private functions region ***/
+
+/*----------------------------------------------------------------------------------validateFatIs32
+ * 
+ */
+void validateFatIs32(fat32 *fat32Obj)
+{
+	fat32BS* bootSector = fat32Obj->bootSector;
+	
+	uint32_t RootDirSectors = ((((uint32_t) bootSector->BPB_RootEntCnt) * 32) + 
+		(bootSector->BPB_BytesPerSec - 1));
+		
+	uint32_t FATSz;
+	if(bootSector->BPB_FATSz16 != 0)
+		FATSz = bootSector->BPB_FATSz16;
+	else
+		FATSz = bootSector->BPB_FATSz32;
+	
+	uint32_t TotSec;
+	if(bootSector->BPB_TotSec16 != 0)
+		TotSec = bootSector->BPB_TotSec16;
+	else
+		TotSec = bootSector->BPB_TotSec32;
+	
+	uint32_t DataSec = TotSec - (bootSector->BPB_RsvdSecCnt + 
+		(((uint32_t)bootSector->BPB_NumFATs) * FATSz) + RootDirSectors);
+	
+	uint32_t CountofClusters = DataSec / ((uint32_t) bootSector->BPB_SecPerClus);
+	
+	if(CountofClusters < 4085) 
+	{
+		printf("volume is FAT12\nExiting program\n");
+		exit(EXIT_FAILURE);
+	} 
+	else if(CountofClusters < 65525) 
+	{
+		printf("volume is FAT16\nExiting program\n");
+		exit(EXIT_FAILURE);
+	} 
+}// validateFatIs32

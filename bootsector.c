@@ -6,6 +6,7 @@
 #include "bootsector.h"
 
 #define BOOTSECTOR_SIZE 512
+#define FAT32SIG 0x29
 
 /*** private variables ***/
 char buf[BOOTSECTOR_SIZE];
@@ -37,6 +38,13 @@ char* getDriveType(fat32BS *bootSector)
 int getMirrFatVal(fat32BS *bootSector)
 {
 	return bootSector->BPB_ExtFlags & 0x0080;
+}
+
+int isBootSectorValid(fat32BS *bootSector)
+{
+	if (bootSector->BS_BootSig == (uint8_t)FAT32SIG)
+		return 1;
+	return 0;
 }
 
 char* getMirrFatMsg(fat32BS *bootSector)
