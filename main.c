@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
 	fat32Obj = createFat32(deviceFP);
 	
 	checkFat32(fat32Obj);
-
+	
 	char input[MAX_INPUT_SIZE];
 	while (1)
 	{
@@ -150,10 +150,11 @@ void showDir()
 				currDir->DIR_Name, currDir->DIR_FileSize);
 			else if (currDir->DIR_Attr != (char)ATTR_LONG_NAME &&
 				currDir->DIR_Attr != (char)ATTR_VOLUME_ID)
-				printf("%s\t%d\n", currDir->DIR_Name, currDir->DIR_FileSize);
+				printf("%.*s\t%d\n", DIR_Name_LENGTH, currDir->DIR_Name, currDir->DIR_FileSize);
 		}
 		curEntry++;
-		if (curEntry > dirsPerClust)
+		currDir++;
+		if (currDir->DIR_Name[0] == (char)END_ENTRY || curEntry > dirsPerClust)
 		{
 			curClust = readFAT(fat32Obj, curClust);
 			if (curClust < (uint32_t)END_OF_CLUSTER && curClust != 0)
@@ -162,14 +163,6 @@ void showDir()
 				readCluster(fat32Obj, curClust, clusterBuffer);
 				currDir = (fat32DE*) clusterBuffer;
 			}
-			else
-			{
-				return;
-			}
-		}
-		else
-		{
-			currDir++;
 		}
 	}
 	
@@ -183,6 +176,10 @@ void showDir()
 void changeDirectory(char dirName[])
 {
 	fat32DE *currDir = fat32Obj->directoryEntry;
+	char clusterBuffer[fat32Obj->clusterSize];
+	uint32_t curClust = fat32Obj->curDirCluster;
+	uint32_t curEntry = 0;
+	uint32_t dirsPerClust = fat32Obj->clusterSize / sizeof(currDir);
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
 	{
@@ -195,7 +192,18 @@ void changeDirectory(char dirName[])
 				fat32Obj->directoryEntry = (fat32DE*) fat32Obj->dirClusterBuf;
 			}
 		}
+		curEntry++;
 		currDir++;
+		if (currDir->DIR_Name[0] == (char)END_ENTRY || curEntry > dirsPerClust)
+		{
+			curClust = readFAT(fat32Obj, curClust);
+			if (curClust < (uint32_t)END_OF_CLUSTER && curClust != 0)
+			{
+				curEntry = 0;
+				readCluster(fat32Obj, curClust, clusterBuffer);
+				currDir = (fat32DE*) clusterBuffer;
+			}
+		}
 	}
 }// changeDirectory
 
@@ -205,6 +213,10 @@ void changeDirectory(char dirName[])
 void getFile(char fileName[])
 {
 	fat32DE *currDir = fat32Obj->directoryEntry;
+	char clusterBuffer[fat32Obj->clusterSize];
+	uint32_t curClust = fat32Obj->curDirCluster;
+	uint32_t curEntry = 0;
+	uint32_t dirsPerClust = fat32Obj->clusterSize / sizeof(currDir);
 	
 	while (currDir->DIR_Name[0] != (char)END_ENTRY)
 	{
@@ -217,7 +229,18 @@ void getFile(char fileName[])
 				close(fileFD);
 			}
 		}
+		curEntry++;
 		currDir++;
+		if (currDir->DIR_Name[0] == (char)END_ENTRY || curEntry > dirsPerClust)
+		{
+			curClust = readFAT(fat32Obj, curClust);
+			if (curClust < (uint32_t)END_OF_CLUSTER && curClust != 0)
+			{
+				curEntry = 0;
+				readCluster(fat32Obj, curClust, clusterBuffer);
+				currDir = (fat32DE*) clusterBuffer;
+			}
+		}
 	}
 }// getFile
 
