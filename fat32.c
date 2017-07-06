@@ -46,21 +46,23 @@ fat32* createFat32(int deviceFP)
 /*--------------------------------------------------------------------------------------readCluster
  * 
  */
-void readCluster(fat32 *fat32Obj, int clusterNum, char buf[])
+void readCluster(fat32 *fat32Obj, uint64_t clusterNum, char buf[])
 {
 	if (clusterNum == 0)
-		clusterNum = 2;
+		clusterNum = fat32Obj->bootSector->BPB_RootClus;
 	
-	int cluster2 = fat32Obj->cluster2;
-	lseek(fat32Obj->deviceFP, cluster2 * fat32Obj->sectorSize + 
-		((clusterNum - 2) * 8 * fat32Obj->sectorSize), SEEK_SET);
+	uint64_t cluster2 = fat32Obj->cluster2;
+	uint64_t cluster2InBytes = cluster2 * fat32Obj->sectorSize;
+	uint64_t offsetInBytes = (clusterNum - 2) * fat32Obj->clusterSize;
+	uint64_t totalOffset = cluster2InBytes + offsetInBytes;
+	lseek(fat32Obj->deviceFP,  totalOffset, SEEK_SET);
 	read(fat32Obj->deviceFP, buf, fat32Obj->clusterSize);
 }// readCluster
 
 /*---------------------------------------------------------------------------------------readSector
  * 
  */
-void readSector(fat32 *fat32Obj, int sectorNum, char buf[])
+void readSector(fat32 *fat32Obj, uint64_t sectorNum, char buf[])
 {
 	lseek(fat32Obj->deviceFP, sectorNum * fat32Obj->sectorSize, SEEK_SET);
 	read(fat32Obj->deviceFP, buf, fat32Obj->sectorSize);
@@ -69,16 +71,19 @@ void readSector(fat32 *fat32Obj, int sectorNum, char buf[])
 /*------------------------------------------------------------------------------------------readFAT
  * NOTE!!!! see calculations? remember tip from class? this is the main bug
  */
-uint32_t readFAT(fat32 *fat32Obj, int n)
+uint32_t readFAT(fat32 *fat32Obj, uint32_t n)
 {
 	uint32_t fatEntry = -1;
 	
 	fat32BS *bootSector = fat32Obj->bootSector;
-	int fatOffset = n * 4;
-	int thisFATSecNum = bootSector->BPB_RsvdSecCnt + (fatOffset / bootSector->BPB_BytesPerSec);
+	uint64_t fatOffset = n * 4;
+	uint64_t thisFATSecNum = bootSector->BPB_RsvdSecCnt + (fatOffset / bootSector->BPB_BytesPerSec);
 	readSector(fat32Obj, thisFATSecNum, fat32Obj->fatSectorBuf);	
-	int thisFATEntOffset = fatOffset % bootSector->BPB_BytesPerSec;
-	fatEntry = (uint32_t) fat32Obj->fatSectorBuf[thisFATEntOffset];
+	uint64_t thisFATEntOffset = fatOffset % bootSector->BPB_BytesPerSec;
+	fatEntry = (uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset] +
+		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 1] << 8) +
+		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 2] << 16) +
+		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 3] << 24);
 	fatEntry = fatEntry & 0x0FFFFFFF; // ignoring first 4 bits
 	
 	return fatEntry;
@@ -144,3 +149,8 @@ void validateFatIs32(fat32 *fat32Obj)
 		exit(EXIT_FAILURE);
 	} 
 }// validateFatIs32
+
+uint64_t getFreeBytes(fat32 *fat32Obj)
+{
+	return fat32Obj->fsinfo->FSI_Free_Count * ((uint64_t) fat32Obj->clusterSize);
+}

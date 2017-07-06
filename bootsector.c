@@ -54,3 +54,9 @@ char* getMirrFatMsg(fat32BS *bootSector)
 	else
 		return "no";
 }
+
+
+uint64_t getSizeInBytes(fat32BS *bootSector)
+{
+	return ((uint64_t) bootSector->BPB_TotSec32) * bootSector->BPB_BytesPerSec;
+}

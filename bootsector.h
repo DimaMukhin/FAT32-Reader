@@ -60,4 +60,6 @@ char* getDriveType(fat32BS *bootSector);
 
 char* getMirrFatMsg(fat32BS *bootSector);
 
+uint64_t getSizeInBytes(fat32BS *bootSector);
+
 #endif

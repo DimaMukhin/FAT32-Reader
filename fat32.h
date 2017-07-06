@@ -27,12 +27,14 @@ typedef struct fat32_struct
 /*** public functions ***/
 fat32* createFat32(int deviceFP);
 
-void readCluster(fat32 *fat32Obj, int clusterNum, char buf[]);
+void readCluster(fat32 *fat32Obj, uint64_t clusterNum, char buf[]);
 
-uint32_t readFAT(fat32 *fat32Obj, int n);
+uint32_t readFAT(fat32 *fat32Obj, uint32_t n);
 
-void readSector(fat32 *fat32Obj, int sectorNum, char buf[]);
+void readSector(fat32 *fat32Obj, uint64_t sectorNum, char buf[]);
 
 void checkFat32(fat32 *fat32Obj);
+
+uint64_t getFreeBytes(fat32 *fat32Obj);
 
 #endif
