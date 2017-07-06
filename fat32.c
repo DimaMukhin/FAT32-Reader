@@ -52,8 +52,10 @@ void readCluster(fat32 *fat32Obj, uint64_t clusterNum, char buf[])
 		clusterNum = fat32Obj->bootSector->BPB_RootClus;
 	
 	uint64_t cluster2 = fat32Obj->cluster2;
-	lseek(fat32Obj->deviceFP, cluster2 * fat32Obj->sectorSize + 
-		((clusterNum - 2) * 8 * fat32Obj->sectorSize), SEEK_SET);
+	uint64_t cluster2InBytes = cluster2 * fat32Obj->sectorSize;
+	uint64_t offsetInBytes = (clusterNum - 2) * fat32Obj->clusterSize;
+	uint64_t totalOffset = cluster2InBytes + offsetInBytes;
+	lseek(fat32Obj->deviceFP,  totalOffset, SEEK_SET);
 	read(fat32Obj->deviceFP, buf, fat32Obj->clusterSize);
 }// readCluster
 
@@ -147,3 +149,8 @@ void validateFatIs32(fat32 *fat32Obj)
 		exit(EXIT_FAILURE);
 	} 
 }// validateFatIs32
+
+uint64_t getFreeBytes(fat32 *fat32Obj)
+{
+	return fat32Obj->fsinfo->FSI_Free_Count * ((uint64_t) fat32Obj->clusterSize);
+}

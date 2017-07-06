@@ -35,4 +35,6 @@ void readSector(fat32 *fat32Obj, uint64_t sectorNum, char buf[]);
 
 void checkFat32(fat32 *fat32Obj);
 
+uint64_t getFreeBytes(fat32 *fat32Obj);
+
 #endif
