@@ -1,3 +1,19 @@
+/*
+ * NAME                     : Dima Mukhin
+ * STUDENT NUMBER           : 7773184
+ * COURSE                   : COMP 3430
+ * INSTRUCTOR               : Dr. Jim Young
+ * ASSIGNMENT               : 3
+ * Question                 : 1
+ *
+ */
+
+/*
+ * FILE     : main.c
+ * REMARKS  : Contains main function for running the fat32 reader
+ *			  Ussage: fat32reader /dev/somedevice
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -12,28 +28,26 @@
 #include "directoryentry.h"
 #include "bootsector.h"
 
-#define ATTR_DIRECTORY 0x10
-#define ATTR_VOLUME_ID 0x08
-#define ATTR_LONG_NAME 0x0F
-#define FREE_ENTRY 0xE5
-#define END_ENTRY 0x00
-#define END_OF_CLUSTER 0x0FFFFFF8
-#define MAX_INPUT_SIZE 50
+#define END_OF_CLUSTER 0x0FFFFFF8	// end of cluster signature
+#define MAX_INPUT_SIZE 50			// maximum input to process
 #define BYTETOMEG 1000000			// using this instead of 1048576 (same as in the example)
-#define MEGTOBYTE 1000
-#define END_OF_READ 0
+#define MEGTOBYTE 1000				// converting MB to GB
+#define END_OF_READ 0				// EOF value of write() according to man page
+#define CLUSTER_HI_OFFSET 16		// offset of cluster high
 
 /*** private functions ***/
-void showInfo();
-void showDir();
-void changeDirectory(char dirName[]);
-void getFile(char fileName[]);
-int dirNameEquals(char dirName[], char cdName[]);
-int fileNameEquals(char fileName[], char getName[]);
-void populateFile(uint32_t startCluster, int fileFD, uint32_t fileSize);
-uint32_t getInputFromUser(char dest[]);
-void processInput(char input[]);
-void toUpperString(char *input);
+void showInfo();										// show FAT32 info
+void showDir();											// show current directory
+void changeDirectory(char dirName[]);					// change directory
+void getFile(char fileName[]);							// get file by name
+int dirNameEquals(char dirName[], char cdName[]);		// check if two dir names are equal
+int fileNameEquals(char fileName[], char getName[]);	// check if two file names are equal
+uint32_t getInputFromUser(char dest[]);					// get input from user, max 50 chars
+void processInput(char input[]);						// process user input
+void toUpperString(char *input);						// convert input to upper case
+
+// populate a file from the device to local machine
+void populateFile(uint32_t startCluster, uint32_t fileFD, uint32_t fileSize);
 
 
 /*** private global variables ***/
@@ -47,7 +61,15 @@ int main(int argc, char* argv[])
 		printf("Ussage: fat32reader /dev/somedevice\nExiting program\n");
 		exit(EXIT_FAILURE);	
 	}	
-	int deviceFP = open(argv[1], O_RDONLY);
+	
+	uint32_t deviceFP = open(argv[1], O_RDONLY);
+	
+	if (deviceFP == -1)
+	{
+		printf("could not open device correctly\nExiting program\n");
+		exit(EXIT_FAILURE);	
+	}
+	
 	fat32Obj = createFat32(deviceFP);
 	
 	checkFat32(fat32Obj);
@@ -211,7 +233,8 @@ void changeDirectory(char dirName[])
 		{
 			if (dirNameEquals(currDir->DIR_Name, dirName))
 			{
-				uint32_t clusterNum = currDir->DIR_FstClusLO + (currDir->DIR_FstClusHI << 16);
+				uint32_t clusterNum = currDir->DIR_FstClusLO +
+				(currDir->DIR_FstClusHI << CLUSTER_HI_OFFSET);
 				readCluster(fat32Obj, clusterNum, fat32Obj->dirClusterBuf);
 				if (clusterNum == 0)
 					fat32Obj->curDirCluster = fat32Obj->bootSector->BPB_RootClus;
@@ -255,7 +278,8 @@ void getFile(char fileName[])
 		{
 			if (fileNameEquals(currDir->DIR_Name, fileName))
 			{
-				uint32_t clusterNum = currDir->DIR_FstClusLO + (currDir->DIR_FstClusHI << 16);
+				uint32_t clusterNum = currDir->DIR_FstClusLO + 
+				(currDir->DIR_FstClusHI << CLUSTER_HI_OFFSET);
 				int fileFD = open(fileName, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
 				populateFile(clusterNum, fileFD, currDir->DIR_FileSize);
 				close(fileFD);
@@ -284,7 +308,7 @@ void getFile(char fileName[])
  */
 int dirNameEquals(char dirName[], char cdName[])
 {
-	if (strlen(cdName) > 8)
+	if (strlen(cdName) > DIR_LENGTH)
 		return 0;
 	
 	for (int i = 0; i < strlen(cdName); i++)
@@ -293,7 +317,7 @@ int dirNameEquals(char dirName[], char cdName[])
 			return 0;
 	}
 	
-	if (strlen(cdName) < 8 && dirName[strlen(cdName)] != (char)0x20)
+	if (strlen(cdName) < DIR_LENGTH && dirName[strlen(cdName)] != (char)DIR_PAD)
 		return 0;
 	
 	return 1;
@@ -311,7 +335,7 @@ int fileNameEquals(char fileName[], char getName[])
 	{
 		if (getName[getNamePtr] == '.')
 			getNamePtr++;
-		else if (fileName[fileNamePtr] == (char)0x20)
+		else if (fileName[fileNamePtr] == (char)DIR_PAD)
 			fileNamePtr++;
 		else if (getName[getNamePtr] != fileName[fileNamePtr])
 			return 0;
@@ -330,10 +354,10 @@ int fileNameEquals(char fileName[], char getName[])
 /*-----------------------------------------------------------------------------------------populateFile
  * 
  */
-void populateFile(uint32_t startCluster, int fileFD, uint32_t fileSize)
+void populateFile(uint32_t startCluster, uint32_t fileFD, uint32_t fileSize)
 {
 	uint32_t currCluster = startCluster;
-	int nextCluster;
+	uint32_t nextCluster;
 	uint32_t lastClusterSize = fileSize % fat32Obj->clusterSize;
 	
 	printf("\nGetting file, please wait...\n");

@@ -6,6 +6,14 @@
 #include "fat32.h"
 #include "bootsector.h"
 
+#define BYTES_PER_32BIT 4
+#define BYTE_OFFSET 8
+#define DBYTE_OFFSET 16
+#define TBYTE_OFFSET 24
+#define FAT_MASK 0x0FFFFFFF
+#define FAT12_CLUSTERS 4085
+#define FAT16_CLUSTERS 65525
+
 /*** private function declerations ***/
 void validateFatIs32(fat32 *fat32Obj);
 
@@ -14,7 +22,7 @@ void validateFatIs32(fat32 *fat32Obj);
 /*--------------------------------------------------------------------------------------createFat32
  * 
  */
-fat32* createFat32(int deviceFP)
+fat32* createFat32(uint32_t deviceFP)
 {
 	fat32 *fat32Obj = (fat32*) malloc(sizeof(fat32));
 	fat32Obj->deviceFP = deviceFP;
@@ -76,15 +84,15 @@ uint32_t readFAT(fat32 *fat32Obj, uint32_t n)
 	uint32_t fatEntry = -1;
 	
 	fat32BS *bootSector = fat32Obj->bootSector;
-	uint64_t fatOffset = n * 4;
+	uint64_t fatOffset = n * BYTES_PER_32BIT;
 	uint64_t thisFATSecNum = bootSector->BPB_RsvdSecCnt + (fatOffset / bootSector->BPB_BytesPerSec);
 	readSector(fat32Obj, thisFATSecNum, fat32Obj->fatSectorBuf);	
 	uint64_t thisFATEntOffset = fatOffset % bootSector->BPB_BytesPerSec;
 	fatEntry = (uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset] +
-		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 1] << 8) +
-		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 2] << 16) +
-		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 3] << 24);
-	fatEntry = fatEntry & 0x0FFFFFFF; // ignoring first 4 bits
+		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 1] << BYTE_OFFSET) +
+		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 2] << DBYTE_OFFSET) +
+		((uint8_t) fat32Obj->fatSectorBuf[thisFATEntOffset + 3] << TBYTE_OFFSET);
+	fatEntry = fatEntry & FAT_MASK; // ignoring first 4 bits
 	
 	return fatEntry;
 }// readFAT
@@ -138,12 +146,12 @@ void validateFatIs32(fat32 *fat32Obj)
 	
 	uint32_t CountofClusters = DataSec / ((uint32_t) bootSector->BPB_SecPerClus);
 	
-	if(CountofClusters < 4085) 
+	if(CountofClusters < FAT12_CLUSTERS) 
 	{
 		printf("volume is FAT12\nExiting program\n");
 		exit(EXIT_FAILURE);
 	} 
-	else if(CountofClusters < 65525) 
+	else if(CountofClusters < FAT16_CLUSTERS) 
 	{
 		printf("volume is FAT16\nExiting program\n");
 		exit(EXIT_FAILURE);

@@ -11,8 +11,8 @@
 
 typedef struct fat32_struct
 {
-	int deviceFP;
-	int cluster2;
+	uint32_t deviceFP;
+	uint32_t cluster2;
 	uint32_t sectorSize;
 	uint32_t clusterSize;
 	uint32_t curDirCluster;
@@ -25,7 +25,7 @@ typedef struct fat32_struct
 } fat32;
 
 /*** public functions ***/
-fat32* createFat32(int deviceFP);
+fat32* createFat32(uint32_t deviceFP);
 
 void readCluster(fat32 *fat32Obj, uint64_t clusterNum, char buf[]);
 

@@ -48,9 +48,9 @@ struct fat32BS_struct {
 typedef struct fat32BS_struct fat32BS;
 
 /*** public functions ***/
-fat32BS* initializeBootSector(int deviceFP);
+fat32BS* initializeBootSector(uint32_t deviceFP);
 
-int getMirrFatVal(fat32BS *bootSector);
+uint32_t getMirrFatVal(fat32BS *bootSector);
 
 int isBootSectorValid(fat32BS *bootSector);
 

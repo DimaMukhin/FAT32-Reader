@@ -7,11 +7,14 @@
 
 #define BOOTSECTOR_SIZE 512
 #define FAT32SIG 0x29
+#define FIXED_MEDIA_TYPE 0xF8
+#define DRV_NUM_HD 0x80
+#define MIRR_FAT_MASK 0x0080
 
 /*** private variables ***/
 char buf[BOOTSECTOR_SIZE];
 
-fat32BS* initializeBootSector(int deviceFP)
+fat32BS* initializeBootSector(uint32_t deviceFP)
 {
 	read(deviceFP, buf, BOOTSECTOR_SIZE);
 	fat32BS *bootSector = (fat32BS*) malloc(sizeof(fat32BS));
@@ -21,7 +24,7 @@ fat32BS* initializeBootSector(int deviceFP)
 
 char* getMediaType(fat32BS *bootSector)
 {
-	if (bootSector->BPB_Media == (uint8_t)0xF8)
+	if (bootSector->BPB_Media == (uint8_t)FIXED_MEDIA_TYPE)
 		return "fixed";
 	else
 		return "removable";
@@ -29,15 +32,15 @@ char* getMediaType(fat32BS *bootSector)
 
 char* getDriveType(fat32BS *bootSector)
 {
-	if (bootSector->BS_DrvNum == (uint8_t)0x80)
+	if (bootSector->BS_DrvNum == (uint8_t)DRV_NUM_HD)
 		return "HD";
 	else
 		return "floppy";
 }
 
-int getMirrFatVal(fat32BS *bootSector)
+uint32_t getMirrFatVal(fat32BS *bootSector)
 {
-	return bootSector->BPB_ExtFlags & 0x0080;
+	return ((uint32_t) (bootSector->BPB_ExtFlags & MIRR_FAT_MASK));
 }
 
 int isBootSectorValid(fat32BS *bootSector)
