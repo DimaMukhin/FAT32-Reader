@@ -1,5 +1,5 @@
-fat32reader: main.o fat32.o bootsector.o directoryentry.o fsinfo.o
-	clang -Wall -g -o fat32reader main.o fat32.o bootsector.o directoryentry.o fsinfo.o
+fat32reader: main.o fat32.o bootsector.o directoryentry.o fsinfo.o errorcheck.o
+	clang -Wall -g -o fat32reader main.o fat32.o bootsector.o directoryentry.o fsinfo.o errorcheck.o
 	
 main.o: main.c
 	clang -Wall -g -c main.c
@@ -15,6 +15,9 @@ directoryentry.o: directoryentry.c
 	
 fsinfo.o: fsinfo.c
 	clang -Wall -g -c fsinfo.c
+	
+errorcheck.o: errorcheck.c
+	clang -Wall -g -c errorcheck.c
 	
 clean:
 	rm -rf *o fat32reader
